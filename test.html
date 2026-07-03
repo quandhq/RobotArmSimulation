@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Kinematics Refresher</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Symbols" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Code:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --primary: #0B57D0; --surface: #FFFFFF; --surface-container: #F0F4F9;
+            --on-surface: #1B1C1D; --on-surface-variant: #444746;
+            --outline: #747775; --chart-1: #1558D6; --chart-2: #046E00; --chart-3: #EAA937;
+            --ff-sans: "Google Sans", sans-serif; --ff-mono: "Google Code", monospace;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #A8C7FA; --surface: #101218; --surface-container: #282A2C;
+                --on-surface: #FFFFFF; --on-surface-variant: #C4C7C5;
+                --outline: #9A9B9C; --chart-1: #5292F9; --chart-2: #90E58C; --chart-3: #F5B84F;
+            }
+        }
+        body { margin: 0; height: 100vh; display: flex; flex-direction: column; font-family: var(--ff-sans); background: var(--surface-container); color: var(--on-surface); padding: 12px; box-sizing: border-box; }
+        .widget-shell { display: flex; flex-direction: column; height: 100%; background: var(--surface); border-radius: 24px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header { padding: 16px 24px; background: var(--surface-container); border-bottom: 1px solid var(--outline); display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { margin: 0; font-size: 1.2rem; font-weight: 500; }
+        .split-view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+        @media (min-width: 768px) { .split-view { flex-direction: row; } }
+        .pane-3d { flex: 1; position: relative; min-height: 300px; background: #1a1a1a; }
+        .pane-math { flex: 1; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--outline); }
+        
+        .controls { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 24px; background: var(--surface-container); border-top: 1px solid var(--outline); }
+        .slider-group { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 8px; }
+        .slider-group label { font-size: 14px; font-weight: 500; display: flex; justify-content: space-between; }
+        input[type="range"] { width: 100%; cursor: pointer; accent-color: var(--primary); }
+        
+        /* Matrix Styling */
+        .matrix-box { background: var(--surface-container); padding: 16px; border-radius: 12px; margin-bottom: 24px; text-align: center; }
+        .matrix-title { font-weight: 500; margin-bottom: 12px; font-size: 15px; }
+        .matrix-container { display: inline-flex; align-items: center; justify-content: center; position: relative; padding: 0 16px; }
+        .matrix-container::before, .matrix-container::after { content: ''; position: absolute; top: 0; bottom: 0; width: 12px; border: 2px solid var(--on-surface); }
+        .matrix-container::before { left: 0; border-right: none; }
+        .matrix-container::after { right: 0; border-left: none; }
+        
+        .grid-4x4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 16px; font-family: var(--ff-mono); font-size: 14px; }
+        .cell { padding: 4px; min-width: 48px; text-align: right; }
+        .cell.rot { color: var(--chart-1); font-weight: 500; }
+        .cell.pos { color: var(--chart-3); font-weight: 700; }
+        .cell.zero { color: var(--on-surface-variant); opacity: 0.6; }
+        
+        .explanation { font-size: 14px; line-height: 1.6; color: var(--on-surface-variant); }
+        .explanation span.rot { color: var(--chart-1); font-weight: 500; }
+        .explanation span.pos { color: var(--chart-3); font-weight: 700; }
+        
+        canvas { display: block; width: 100%; height: 100%; outline: none; }
+        .hud-overlay { position: absolute; top: 16px; left: 16px; pointer-events: none; color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+        .badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 12px; font-size: 12px; backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body>
+
+<div class="widget-shell">
+    <div class="header">
+        <h2>Forward Kinematics: Chaining Matrices</h2>
+    </div>
+    
+    <div class="split-view">
+        <!-- Left: 3D Visualization -->
+        <div class="pane-3d" id="viz-container">
+            <div class="hud-overlay">
+                <div class="badge"><span class="google-symbols" style="font-size: 14px;">3d_rotation</span> Drag to rotate</div>
+            </div>
+        </div>
+        
+        <!-- Right: Math Visualization -->
+        <div class="pane-math">
+            <div class="matrix-box">
+                <div class="matrix-title">Final Pose of Robot Tip (T_final)</div>
+                <div class="matrix-container">
+                    <div class="grid-4x4" id="matrix-display">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="explanation">
+                <p>As you move the sliders below, the system computes the <strong>Forward Kinematics</strong>.</p>
+                <p>1. It calculates a Transformation Matrix for <strong>Joint 1</strong>.</p>
+                <p>2. It calculates a Transformation Matrix for <strong>Joint 2</strong>.</p>
+                <p>3. It multiplies them: <code>T_final = T_1 × T_2 × T_tip</code></p>
+                <p>The <span class="rot">blue numbers (top-left 3x3)</span> represent the 3D Rotation (pointing direction) of the tip.</p>
+                <p>The <span class="pos">yellow numbers (top-right 3x1)</span> represent the exact X, Y, Z coordinates of the tip in space!</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bottom: Controls -->
+    <div class="controls">
+        <div class="slider-group">
+            <label><span>Joint 1 (Base Yaw)</span> <span id="val-theta1">0°</span></label>
+            <input type="range" id="slider-theta1" min="-180" max="180" value="45" step="1">
+        </div>
+        <div class="slider-group">
+            <label><span>Joint 2 (Shoulder Pitch)</span> <span id="val-theta2">0°</span></label>
+            <input type="range" id="slider-theta2" min="-135" max="135" value="-45" step="1">
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- UI Elements ---
+    const sliderT1 = document.getElementById('slider-theta1');
+    const sliderT2 = document.getElementById('slider-theta2');
+    const valT1 = document.getElementById('val-theta1');
+    const valT2 = document.getElementById('val-theta2');
+    const matrixDisplay = document.getElementById('matrix-display');
+    const vizContainer = document.getElementById('viz-container');
+
+    // --- State ---
+    let theta1 = parseFloat(sliderT1.value);
+    let theta2 = parseFloat(sliderT2.value);
+
+    // --- Three.js Setup ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    vizContainer.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    camera.position.set(12, 12, 15);
+    controls.target.set(0, 3, 0);
+
+    // Grid and Lights
+    scene.add(new THREE.GridHelper(20, 20, 0x555555, 0x333333));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    scene.add(dirLight);
+
+    // Helpers to visualize coordinate frames
+    const createAxes = (size) => new THREE.AxesHelper(size);
+    scene.add(createAxes(5)); // World Origin (Base)
+
+    // --- Robot Construction (The Kinematic Chain) ---
+    // Materials
+    const matBase = new THREE.MeshStandardMaterial({ color: 0x444444 });
+    const matLink1 = new THREE.MeshStandardMaterial({ color: 0x1558D6 }); // Blueish
+    const matLink2 = new THREE.MeshStandardMaterial({ color: 0x046E00 }); // Greenish
+    const matJoint = new THREE.MeshStandardMaterial({ color: 0xEAA937 }); // Yellow hinge
+
+    // Joint 1 (Base Hinge)
+    const joint1Group = new THREE.Group();
+    scene.add(joint1Group);
+
+    // Base geometry
+    const baseMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, 0.5, 32), matBase);
+    baseMesh.position.y = 0.25;
+    scene.add(baseMesh);
+
+    // Link 1
+    const L1_LENGTH = 5.0;
+    const link1Mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, L1_LENGTH, 16), matLink1);
+    link1Mesh.position.y = L1_LENGTH / 2; // Move cylinder up so base is at origin
+    joint1Group.add(link1Mesh);
+    joint1Group.add(createAxes(2)); // Frame of Link 1
+
+    // Joint 2 (Shoulder Hinge)
+    const joint2Group = new THREE.Group();
+    joint2Group.position.y = L1_LENGTH; // Attached to end of Link 1
+    joint1Group.add(joint2Group); // Add to chain
+
+    const joint2Mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.5, 16), matJoint);
+    joint2Mesh.rotation.z = Math.PI / 2; // Lay flat to act as a pitch hinge
+    joint2Group.add(joint2Mesh);
+
+    // Link 2
+    const L2_LENGTH = 4.0;
+    const link2Mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, L2_LENGTH, 16), matLink2);
+    link2Mesh.position.y = L2_LENGTH / 2; // Offset from hinge
+    joint2Group.add(link2Mesh);
+
+    // Robot Tip (End Effector)
+    const tipGroup = new THREE.Group();
+    tipGroup.position.y = L2_LENGTH;
+    joint2Group.add(tipGroup);
+    
+    const tipMesh = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+    tipGroup.add(tipMesh);
+    tipGroup.add(createAxes(3)); // Show final orientation of the tip!
+
+    // --- Logic & Math ---
+    
+    // Updates the DOM matrix representation
+    function updateMatrixDisplay(matrix4) {
+        const els = matrix4.elements; // Three.js stores elements in column-major order
+        matrixDisplay.innerHTML = '';
+        
+        // Loop through rows (0 to 3) then columns (0 to 3)
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                const val = els[c * 4 + r]; // Convert column-major to row-major indexing
+                
+                const div = document.createElement('div');
+                div.className = 'cell';
+                
+                // Color coding based on location in the 4x4 matrix
+                if (r < 3 && c < 3) div.classList.add('rot'); // Rotation 3x3
+                else if (r < 3 && c === 3) div.classList.add('pos'); // Position 3x1
+                else div.classList.add('zero'); // Bottom row (0,0,0,1)
+                
+                // Formatting
+                let displayVal = Math.abs(val) < 0.001 ? "0.00" : val.toFixed(2);
+                if (displayVal === "-0.00") displayVal = "0.00";
+                
+                div.textContent = displayVal;
+                matrixDisplay.appendChild(div);
+            }
+        }
+    }
+
+    function updateKinematics() {
+        // 1. Update visual 3D robot angles based on sliders
+        joint1Group.rotation.y = THREE.MathUtils.degToRad(theta1); // Yaw around Y
+        joint2Group.rotation.x = THREE.MathUtils.degToRad(theta2); // Pitch around X
+
+        // 2. We ask Three.js to calculate the Forward Kinematics (chaining the matrices internally)
+        // This is exactly what `T_chain = T_joint * T_chain` does in your C++ code!
+        tipGroup.updateMatrixWorld(true);
+        
+        // 3. Extract the final 4x4 Matrix of the Tip relative to the World Origin
+        const finalTransformMatrix = tipGroup.matrixWorld;
+
+        // 4. Update the UI
+        valT1.textContent = `${theta1}°`;
+        valT2.textContent = `${theta2}°`;
+        updateMatrixDisplay(finalTransformMatrix);
+    }
+
+    // Input Events
+    sliderT1.addEventListener('input', (e) => { theta1 = parseFloat(e.target.value); updateKinematics(); });
+    sliderT2.addEventListener('input', (e) => { theta2 = parseFloat(e.target.value); updateKinematics(); });
+
+    // Resize handling
+    const resizeObserver = new ResizeObserver(() => {
+        if (!vizContainer.clientWidth) return;
+        camera.aspect = vizContainer.clientWidth / vizContainer.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(vizContainer.clientWidth, vizContainer.clientHeight);
+    });
+    resizeObserver.observe(vizContainer);
+
+    // Render loop
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    // Initial setup
+    updateKinematics();
+    animate();
+
+</script>
+</body>
+</html>
