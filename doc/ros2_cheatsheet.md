@@ -58,7 +58,7 @@ Even though you built your code, ROS 2 doesn't know it exists yet. You have to s
 
 # Make sure you are in the workspace root
 cd ros2_ws
-
+S
 # Source your custom environment
 source install/setup.bash
 
