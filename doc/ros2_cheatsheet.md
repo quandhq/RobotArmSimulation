@@ -78,3 +78,28 @@ The most common mistake in ROS 2 is forgetting to source. Remember this rule:
 source /opt/ros/... tells the terminal where ROS 2 is.
 
 source install/setup.bash tells ROS 2 where your code is.
+
+
+
+# Make VSCode intellisense understand sourcecode 
+1. source the setup.bash file of ros on the linux envirorment into the current opening terminal
+=> source /opt/ros/name_of_ros_version/setup.bash
+2. colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+3. Sync VS Code
+Ctrl+shift+P -> C/C++: Edit Configurations (JSON) -> .vscode/c_cpp_properties.json -> 
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/build/my_robot_kinematics/compile_commands.json"
+        }
+    ],
+    "version": 4
+}
