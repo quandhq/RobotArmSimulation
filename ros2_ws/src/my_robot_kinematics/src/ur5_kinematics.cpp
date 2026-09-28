@@ -1,3 +1,4 @@
+#include "my_robot_kinematics/ur5_kinematics.hpp"
 #include <cmath>
 #include <Eigen/Dense>
 
