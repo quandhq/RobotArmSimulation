@@ -10,5 +10,8 @@ Eigen::Matrix4d screwAxisToSe3(const Eigen::Vector<double, 6>& S);
 Eigen::Vector3d calculateTranslation(const Eigen::Vector3d& linVeloVec,
                                      const Eigen::Vector3d& rotaVeloVec, double theta);
 Eigen::Matrix4d MatrixExp6(const Eigen::Vector<double, 6>& S, double theta);
+Eigen::Matrix<double, 6, 6> calculateSpaceJacobian(
+    const std::vector<Eigen::Vector<double, 6>>& S, 
+    const std::vector<double>& theta);
 
 #endif // UR5_KINEMATICS_HPP
