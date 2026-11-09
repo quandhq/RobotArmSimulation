@@ -46,6 +46,7 @@ cd ros2_ws
 
 # Compile all packages
 colcon build
+=> for this project specifically: colcon build --packages-select my_robot_kinematics --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # Or, to compile just one specific package:
 colcon build --packages-select my_robot_kinematics
